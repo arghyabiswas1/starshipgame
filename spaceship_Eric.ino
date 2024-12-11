@@ -1,7 +1,4 @@
 /**************************************************************
-
-edit test
-
 construction for this device:
   -(use arduino mega as controler)
 
