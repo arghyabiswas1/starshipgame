@@ -1,6 +1,4 @@
 /**************************************************************
-awesome
-
 construction for this device:
   -(use arduino mega as controler)
 
