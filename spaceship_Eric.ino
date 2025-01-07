@@ -94,7 +94,7 @@ static int enemy_health[MAX_ENEMYSHIP];
 static byte Enemy_remain = 100;
 static bool idk1[MAX_ENEMYSHIP]; //diffferent ship has different use for this
 static long enemy_time_counter[MAX_ENEMYSHIP];
-
+static bool mothership_exist;
 //bullet
 static const int MAX_BULLETS = 20;
 static byte bulletX[MAX_BULLETS];
@@ -146,6 +146,13 @@ static const unsigned char transport_ship[] U8X8_PROGMEM = {
 };
 static const unsigned char regeneration_tool[] U8X8_PROGMEM = {
     0x36, 0x7F, 0x7F, 0x3E, 0x1C, 0x08,
+};
+static const unsigned char enemyship6[] U8X8_PROGMEM = {
+    0xC0, 0x07, 0xF0, 0x1F, 0xB8, 0x3B, 0x9C, 0x73, 0x8D, 0x63, 0xC3, 0x07, 0xFF, 0xFF, 0xFF, 0x7F, 0xFF, 0xFF, 0xC3, 0x07, 0x8D, 0x63, 0x9C, 0x73, 0xB8, 0x3B, 0xF0, 0x1F, 0xC0, 0x07,
+};
+
+static const unsigned char littleship[] U8X8_PROGMEM = {
+  0x70, 0x3C, 0x77, 0x3C, 0x70,
 };
 /**************************************************************/
 
@@ -231,7 +238,7 @@ void spaceship_Full(){
 
   //rendering heroship
   u8g2.drawXBMP(x, y, 12, 9, spaceship);
-  
+  u8g2.drawXBMP(60, 30, 16, 15, enemyship6);
 
   //rendering force sheld:
   if(forcesheld_activate){
@@ -285,7 +292,7 @@ void spaceship_Full(){
             long devide = 1000;
             long tier4_charging = (current_time - enemy_time_counter[i]) / devide;
             switch(tier4_charging){
-              case 3: u8g2.drawHLine(0, arcY, 110); if(EnemyY[i] + 6 > y & EnemyY[i] + 6 <= y + 7 & !take_damage){heroship_health --; take_damage = true; take_damage_time = millis();} break;
+              case 3: u8g2.drawHLine(0, arcY, 110); if(EnemyY[i] + 6 > y & EnemyY[i] + 6 <= y + 7 && !take_damage){heroship_health --; take_damage = true; take_damage_time = millis();} break;
               case 0: u8g2.drawArc(arcX, arcY, 7, 85, 170);
               case 1: u8g2.drawArc(arcX, arcY, 5, 85, 170);
               case 2: u8g2.drawArc(arcX, arcY, 3, 85, 170);
@@ -301,10 +308,26 @@ void spaceship_Full(){
             switch((current_time - enemy_time_counter[i]) / devide){
               case 0: case 2: case 4: u8g2.drawCircle(enemy_ticking_counter[i], enemy_ticking_counter2[i], 7); break;
               case 1: case 3: case 5: u8g2.drawLine(line_startX, line_startY,line_startX + 10, line_startY + 10); break;
-              case 6: u8g2.drawDisc(enemy_ticking_counter[i], enemy_ticking_counter2[i], 7); if(x > enemy_ticking_counter[i] - 9 & x < enemy_ticking_counter[i] + 9 & y > enemy_ticking_counter2[i] - 9 & y < enemy_ticking_counter2[i] + 9 & !take_damage){heroship_health --; take_damage = true; take_damage_time = millis();} break;
+              case 6: u8g2.drawDisc(enemy_ticking_counter[i], enemy_ticking_counter2[i], 7); if(x > enemy_ticking_counter[i] - 9 && x < enemy_ticking_counter[i] + 9 && y > enemy_ticking_counter2[i] - 9 && y < enemy_ticking_counter2[i] + 9 && !take_damage){heroship_health --; take_damage = true; take_damage_time = millis();} break;
             }
           }
           break;
+        case 6: sizeX = 16; sizeY = 15; pEnemyship = enemyship6; 
+          if(!idk1[i]){
+            //check if bullet collide with littleship
+            for(byte l = 0; l < 8; l++){
+              byte littleshipY = 60 - (l * 8);
+              for(byte b = 0; b < MAX_BULLETS; b++){
+                if(bulletX[b] == enemy_ticking_counter2[i] && littleshipY >= bulletY[b] && littleshipY <= bulletY[b] + 4){
+                  enemy_ticking_counter[i] ^= 128 / (2 * l);
+                }
+              }
+              byte DOL = enemy_ticking_counter[i] << l;//DOL: dead or alive data
+              byte DOL1 = DOL >> 7;
+              Serial.println(DOL1);
+              if(DOL1 == 1){u8g2.drawXBMP(enemy_ticking_counter2[i], littleshipY, 7, 5, littleship);}
+            }
+          }
       }
       u8g2.drawXBMP(EnemyX[i], EnemyY[i], sizeX, sizeY, pEnemyship);
     }
@@ -353,7 +376,7 @@ void detect_Border() {
 void bullet(){
   //generate bullet
   unsigned long time_now = millis();
-  if(!digitalRead(2) & time_now - time_last_bullet >= 500){
+  if(!digitalRead(2) && time_now - time_last_bullet >= 500){
     for (int i = 0; i <= MAX_BULLETS; i++) {
       if(!bulletActive[i]){
         bulletX[i] = x + 12; // Start at the tip of the spaceship
@@ -395,9 +418,11 @@ void enemyShip_Logics(){
     for (int i = 0; i < MAX_ENEMYSHIP; i++) {
       if(enemyship_active[i]){continue;}
       if(!enemyship_active[i]){
+        if(mothership_exist){ENEMY_VARIENT[i] = random(1,6);}else{ENEMY_VARIENT[i] = random(1, 7);}
         ENEMY_VARIENT[i] = random(1, 6);
-        //ENEMY_VARIENT[i] = 5;
+        ENEMY_VARIENT[i] = 6;
         enemy_ticking_counter[i] = 0;
+        enemy_ticking_counter2[i] = 0;
         EnemyX[i] = 127;
         //EnemyY[i] = random(1, 55);
         switch(ENEMY_VARIENT[i]){
@@ -405,7 +430,8 @@ void enemyShip_Logics(){
           case 2: EnemyY[i] = y - 1;          enemy_health[i] = 5; break;
           case 3: EnemyY[i] = random(1, 55);  enemy_health[i] = 5; break;
           case 4: EnemyY[i] = random(1, 55);  enemy_health[i] = 5; idk1[i] = true; break;
-          case 5: EnemyY[i] = random(1, 55);  enemy_health[i] = 7; idk1[i] = true; break;
+          case 5: EnemyY[i] = random(1, 55);  enemy_health[i] = 6; idk1[i] = true; break;
+          case 6: EnemyY[i] = 25;             enemy_health[i] = 5; idk1[i] = true; mothership_exist = true; break;
         }
 
         enemyship_active[i] = true;
@@ -425,11 +451,12 @@ void enemyShip_Logics(){
       case 3: tier3_Enemy(i); break;//tier 3 ship(cloaker)
       case 4: tier4_Enemy(i); break;//tier 4 ship(tank)
       case 5: tier5_Enemy(i); break;//tier 5 ship(platform)
+      case 6: tier6_Enemy(i); break;//tier 6 ship(mothership)
     }
   
     //recycle enemies  
     if(EnemyX[i] <= 0 | enemy_health[i] <= 0){
-    if(!regeneration_tool_exist & random(1, 21) == 1){generate_regeneration_tool(EnemyX[i], EnemyY[i]);}
+    if(!regeneration_tool_exist && random(1, 21) == 1){generate_regeneration_tool(EnemyX[i], EnemyY[i]);}
     //if(!regeneration_tool_exist){generate_regeneration_tool(EnemyX[i], EnemyY[i]);}
     enemyship_active[i] = false;
     Enemy_remain --;
@@ -440,7 +467,7 @@ void enemyShip_Logics(){
 
 void tier1_Enemy(byte i){
   char distance = EnemyX[i] - x;
-  if(distance <= 50 & distance >= -10 & !idk1[i]){//idk here use to makeship comming back
+  if(distance <= 50 && distance >= -10 && !idk1[i]){//idk here use to makeship comming back
     if(enemy_ticking_counter[i] > 5){
       enemy_speed = 1;
       enemy_ticking_counter[i] = 0;
@@ -457,14 +484,14 @@ void tier1_Enemy(byte i){
     enemy_speed = 1;
   }
 
-  if(idk1[i] & distance >= 50){
+  if(idk1[i] && distance >= 50){
     idk1[i] = false;
   }
   EnemyX[i] -= enemy_speed;
 
-  if(EnemyY[i] < y & distance >= 5 & enemy_ticking_counter[i] >= 1){//MOVE ON y
+  if(EnemyY[i] < y && distance >= 5 && enemy_ticking_counter[i] >= 1){//MOVE ON y
     EnemyY[i] ++;
-  }else if(EnemyY[i] > y & distance >= 5 & enemy_ticking_counter[i] >= 1){
+  }else if(EnemyY[i] > y && distance >= 5 && enemy_ticking_counter[i] >= 1){
     EnemyY[i] --;
   }
 
@@ -474,7 +501,7 @@ void tier2_Enemy(byte i){
   byte enemyship_center = EnemyY[i] + 5;
   //Enemy_actions
 
-  if(distance_to_hero - x < 30 & 0 < distance_to_hero & enemyship_center > y & enemyship_center < y + 8){ //if Enemy is -5 to 20 pixel in front of hero
+  if(distance_to_hero - x < 30 && 0 < distance_to_hero && enemyship_center > y && enemyship_center < y + 8){ //if Enemy is -5 to 20 pixel in front of hero
     if(enemy_ticking_counter[i] > 5){
       enemy_speed = 1;
       enemy_ticking_counter[i] = 0;
@@ -516,7 +543,7 @@ void tier4_Enemy(byte i){
   if(EnemyX[i] > 113){EnemyX[i] --;}
   //move on Y
   
-  if(enemy_ticking_counter[i] >= 20 & idk1[i]){
+  if(enemy_ticking_counter[i] >= 20 && idk1[i]){
     if(EnemyY[i] + 2 < y){
       EnemyY[i] ++;
     }
@@ -528,9 +555,9 @@ void tier4_Enemy(byte i){
   enemy_ticking_counter[i] ++;
 
   //charge and shoot
-  if(EnemyY[i] + 2 == y & idk1[i]){//if its infront of heroship, and is done cool down
+  if(EnemyY[i] + 2 == y && idk1[i]){//if its infront of heroship, and is done cool down
     enemy_time_counter[i] = millis();
-    Serial.println(enemy_time_counter[i]);
+    //Serial.println(enemy_time_counter[i]);
     idk1[i] = false; //in this case, "idk!" means cool down is done
   }
 
@@ -556,8 +583,23 @@ void tier5_Enemy(byte i){
   long current_time = millis();
   if(current_time - enemy_time_counter[i] >= 13000){idk1[i] = true;}
 }
-void tier100_hp(){//the add hp tool for ship thing
+void tier6_Enemy(byte i){//128, 64, 32, 16, 8, 4, 2, 1
+  //move on X:
+  if(EnemyX[i] > 115){EnemyX[i] --;}
 
+  //shoot little ship logic:
+  if(idk1[i] && EnemyX[i] <= 115){
+    enemy_ticking_counter[i] = 255;//ticking counter use to storge data about if the littleship has died
+    enemy_ticking_counter2[i] = 116;
+    enemy_time_counter[i] = millis();
+    idk1[i] = false;
+    Serial.println("littleship setup");
+  }
+
+  //tick littleship X
+  if(!idk1[i] && millis() - enemy_time_counter[i] >= 200){
+    enemy_ticking_counter2[i] --;
+  }
 }
 /**************************************************************/
 
@@ -609,8 +651,8 @@ void hitBox(){
 
   //if heroship collide with bullet
   for(int i = 0; i < MAX_ENEMYBULLETS; i++){
-    if(enemy_bulletActive[i] & enemy_bulletX[i] <= right_hitbox & enemy_bulletX[i] >= left_hitbox & enemy_bulletY[i] <= down_hitbox & enemy_bulletY[i] >= top_hitbox){
-      if(!forcesheld_activate & !take_damage){
+    if(enemy_bulletActive[i] && enemy_bulletX[i] <= right_hitbox && enemy_bulletX[i] >= left_hitbox && enemy_bulletY[i] <= down_hitbox && enemy_bulletY[i] >= top_hitbox){
+      if(!forcesheld_activate && !take_damage){
         heroship_health --;
         take_damage = true;
         take_damage_time = millis();
@@ -652,12 +694,17 @@ void hitBox(){
         Enemy_top = EnemyY[i]; 
         Enemy_right = EnemyX[i] + 14;
         Enemy_down = EnemyY[i] + 10;
+      case 6:
+        Enemy_left = EnemyX[i];
+        Enemy_top = EnemyY[i]; 
+        Enemy_right = EnemyX[i] + 15;
+        Enemy_down = EnemyY[i] + 14;
     }
 
     //if enemy collide with bullet:
     for(int b = 0; b < MAX_BULLETS; b++){
       if(!bulletActive[b]){continue;}
-      if(bulletX[b] >= Enemy_left & bulletX[b] <= Enemy_right & bulletY[b] >= Enemy_top & bulletY[b] <= Enemy_down){
+      if(bulletX[b] >= Enemy_left && bulletX[b] <= Enemy_right && bulletY[b] >= Enemy_top && bulletY[b] <= Enemy_down){
         enemy_health[i] --;
         bulletActive[b] = false;
         continue;
@@ -673,42 +720,42 @@ void hitBox(){
   }
 
   //regeneration tool collide with heroship
-  if(regeneration_tool_exist & collide_hitbox_check(right_hitbox, left_hitbox, top_hitbox, down_hitbox, regeneration_toolX, regeneration_toolX + 6, regeneration_toolY, regeneration_toolY + 5)){heroship_health += 2; regeneration_tool_exist = false;}
+  if(regeneration_tool_exist && collide_hitbox_check(right_hitbox, left_hitbox, top_hitbox, down_hitbox, regeneration_toolX, regeneration_toolX + 6, regeneration_toolY, regeneration_toolY + 5)){heroship_health += 2; regeneration_tool_exist = false;}
 
   //if heroship collide with boss
 }
 
 bool collide_hitbox_check(byte right_hitbox, byte left_hitbox, byte top_hitbox, byte down_hitbox, byte Enemy_right, byte Enemy_left, byte Enemy_top, byte Enemy_down){
-  if(Enemy_top >= top_hitbox & Enemy_top <= down_hitbox){
-    if(Enemy_left >= left_hitbox & Enemy_left <= right_hitbox){//enemy top left corner
+  if(Enemy_top >= top_hitbox && Enemy_top <= down_hitbox){
+    if(Enemy_left >= left_hitbox && Enemy_left <= right_hitbox){//enemy top left corner
       return true;
     }
-    if(Enemy_right >= left_hitbox & Enemy_right <= right_hitbox){//top right corner
+    if(Enemy_right >= left_hitbox && Enemy_right <= right_hitbox){//top right corner
         return true;
     }
   }
-  if(Enemy_down >= top_hitbox & Enemy_down <= down_hitbox){
-    if(Enemy_left >= left_hitbox & Enemy_left <= right_hitbox){//bottom left corner
+  if(Enemy_down >= top_hitbox && Enemy_down <= down_hitbox){
+    if(Enemy_left >= left_hitbox && Enemy_left <= right_hitbox){//bottom left corner
       return true;
     }
-    if(Enemy_right >= left_hitbox & Enemy_right <= right_hitbox){//top bottom corner
+    if(Enemy_right >= left_hitbox && Enemy_right <= right_hitbox){//top bottom corner
       return true;
     }
   }
   //if hero in enemy hitbox
-  if(top_hitbox >= Enemy_top & top_hitbox <= Enemy_down){
-    if(left_hitbox >= Enemy_left & left_hitbox <= Enemy_right){//heroship top left
+  if(top_hitbox >= Enemy_top && top_hitbox <= Enemy_down){
+    if(left_hitbox >= Enemy_left && left_hitbox <= Enemy_right){//heroship top left
       return true;
     }
-    if(right_hitbox >= Enemy_left & right_hitbox <= Enemy_right){//heroship top right
+    if(right_hitbox >= Enemy_left && right_hitbox <= Enemy_right){//heroship top right
       return true;
     }
   }
-  if(down_hitbox >= Enemy_top & down_hitbox <= Enemy_down){
-    if(left_hitbox >= Enemy_left & left_hitbox <= Enemy_right){//heroship bottom left
+  if(down_hitbox >= Enemy_top && down_hitbox <= Enemy_down){
+    if(left_hitbox >= Enemy_left && left_hitbox <= Enemy_right){//heroship bottom left
       return true;
     }
-    if(right_hitbox >= Enemy_left & right_hitbox <= Enemy_right){//heroship bottom right
+    if(right_hitbox >= Enemy_left && right_hitbox <= Enemy_right){//heroship bottom right
       return true;
     }
   }
@@ -716,7 +763,7 @@ bool collide_hitbox_check(byte right_hitbox, byte left_hitbox, byte top_hitbox, 
 }
 
 void enemy_collide(byte i){
-  if(!forcesheld_activate & !take_damage){
+  if(!forcesheld_activate && !take_damage){
     heroship_health -= 2;
     take_damage = true;
     take_damage_time = millis();
@@ -728,14 +775,14 @@ void enemy_collide(byte i){
 
 void forcesheld(){
   long current_time = millis();
-  if(current_time - forcesheld_ticking >= 1000 & cooldown > 0 & !forcesheld_ready){
+  if(current_time - forcesheld_ticking >= 1000 && cooldown > 0 && !forcesheld_ready){
     cooldown --;
     forcesheld_ticking = current_time;
   }
 
   if(cooldown <= 0){forcesheld_ready = true;}
 
-  if(!digitalRead(7) & forcesheld_ready){
+  if(!digitalRead(7) && forcesheld_ready){
     forcesheld_activate = true;
     forcesheld_ready = false;
     cooldown = 38;
@@ -761,13 +808,13 @@ void invincible_time(){
 //generating regeneration tool and deliver it with ally transportation ship
 void regeneration_tool_auto_generation(){
   long current_time = millis();
-  if(current_time - regeneration_tool_generation_time >= 30000 & !regeneration_tool_exist){
+  if(current_time - regeneration_tool_generation_time >= 30000 && !regeneration_tool_exist){
     if(transport_shipX < 30){
       transport_shipX ++;
     }else{generate_regeneration_tool(transport_shipX, transport_shipY);}
   }
 
-  if(regeneration_tool_exist & transport_shipX >= 0){
+  if(regeneration_tool_exist && transport_shipX >= 0){
     transport_shipX --;
   }
 }
@@ -790,14 +837,17 @@ void generate_regeneration_tool(char initialX, char initialY){
 }
 /**************************************************************/
 /*
-regeneration tool:
+00001110
+00111100
+11101110
+00111100
+00001110
 
-00110110
-01111111
-01111111
-00111110
-00011100
-00001000
+01110000
+00111100
+01110111
+00111100
+01110000
 
-0x36, 0x7F, 0x7F, 0x3E, 0x1C, 0x08
+0x70, 0x3C, 0x77, 0x3C, 0x70,
 */
